@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from time import sleep
+import threading
+import concurrent.futures
 
 """
 overall logic
@@ -57,9 +59,19 @@ class Proxy(object):
             print(str(e))
             return None
 
+    def test_all_proxies(self, proxies):
+        print('running the threading on ', proxies)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            executor.map(self.add_proxy, proxies)
+
+    def add_proxy(self, proxy):
+        if self.test_proxy(proxy):
+            self.proxies.append(proxy)
+
     def extract_proxies(self, page):
         bs = BeautifulSoup(page, 'html.parser')
         rows = bs.find_all('tr')
+        proxies_to_test = []
         for row in rows:
             anonymity_cell = row.find('td', {'data-title': '匿名度'})
             if anonymity_cell is not None\
@@ -67,11 +79,8 @@ class Proxy(object):
                 if row.find('td', {'data-title': '类型'}).text == 'HTTPS':
                     proxy = 'https://' + row.find('td', {'data-title': 'IP'}).text + ':'\
                             + row.find('td', {'data-title': 'PORT'}).text
-                    print(proxy)
-                    if self.test_proxy(proxy):
-                        self.proxies.append(proxy)
-
-
+                    proxies_to_test.append(proxy)
+        self.test_all_proxies(proxies_to_test)
         # code for extracting from 'http://www.goubanjia.com/' not working
         # anonymity_tds = bs.find_all('td', text='高匿')
         # for td in anonymity_tds:
@@ -95,8 +104,8 @@ class Proxy(object):
             if page is None:
                 break
             self.extract_proxies(page)
+            print(self.proxies)
             page_num += 1
-            sleep(1)
 
 
 a = Proxy()
