@@ -30,6 +30,17 @@ class Proxy(object):
     def __init__(self):
         self.proxies = []
 
+    def get_proxies(self):
+        page_num = 1
+        while len(self.proxies) < 1:
+            proxies_website = 'https://www.7yip.cn/free/?action=china&page=1'
+            page = self.get_page(proxies_website)
+            if page is None:
+                break
+            self.extract_proxies(page)
+            print(self.proxies)
+            page_num += 1
+
     @staticmethod
     def get_page(url, proxy=None):
         headers = {
@@ -59,15 +70,6 @@ class Proxy(object):
             print(str(e))
             return None
 
-    def test_all_proxies(self, proxies):
-        print('running the threading on ', proxies)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-            executor.map(self.add_proxy, proxies)
-
-    def add_proxy(self, proxy):
-        if self.test_proxy(proxy):
-            self.proxies.append(proxy)
-
     def extract_proxies(self, page):
         bs = BeautifulSoup(page, 'html.parser')
         rows = bs.find_all('tr')
@@ -87,6 +89,15 @@ class Proxy(object):
         #     if td.find_next_sibling('td').text == 'https':
         #         self.proxies.append(td.parent.text)
 
+    def test_all_proxies(self, proxies):
+        print('running the threading on ', proxies)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            executor.map(self.add_proxy, proxies)
+
+    def add_proxy(self, proxy):
+        if self.test_proxy(proxy):
+            self.proxies.append(proxy)
+
     def test_proxy(self, proxy):
         test_url = 'https://www.douban.com/'
         page = self.get_page(test_url, proxy)
@@ -96,20 +107,5 @@ class Proxy(object):
         return True
 
 
-    def get_proxies(self):
-        page_num = 1
-        while len(self.proxies) < 1:
-            proxies_website = 'https://www.7yip.cn/free/?action=china&page=1'
-            page = self.get_page(proxies_website)
-            if page is None:
-                break
-            self.extract_proxies(page)
-            print(self.proxies)
-            page_num += 1
-
-
 a = Proxy()
 a.get_proxies()
-# b = a.test_proxy('http://119.122.212.23:9000')
-# for i, proxy in enumerate(a.proxies):
-#     print(a.test_proxy(proxy))
