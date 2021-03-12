@@ -27,15 +27,34 @@ def singleton(cls):
 class Proxy(object):
     def __init__(self):
         self.proxies = []
+        self.proxies_websites = {
+            '7yip': 'https://www.7yip.cn/free/?action=china&page={page_num}',
+        }
+
+        # stores methods for extracting proxies from each supported website
+        self.extraction_methods = {
+            '7yip': self.extract_from_7yip,
+        }
 
     def get_proxies(self):
         page_num = 1
         while len(self.proxies) < 1:
-            proxies_website = 'https://www.7yip.cn/free/?action=china&page=1'
-            page = self.get_page(proxies_website)
-            if page is None:
-                break
-            self.extract_proxies(page)
+            pages = {}
+            # getting all the first pages from the proxy websites
+            for site, url in self.proxies_websites.items():
+                url = url.format(page_num=page_num)
+                page = self.get_page(url)
+                if page is not None:
+                    print(url)
+                    pages.update({site: page})
+
+            # in case when all the proxy websites are down
+            if len(pages) == 0:
+                print('cannot access any proxies websites')
+                return
+
+            proxies_to_test = self.extract_all_proxies(pages)
+            self.test_and_add_proxies(proxies_to_test)
             print(self.proxies)
             page_num += 1
 
@@ -68,26 +87,32 @@ class Proxy(object):
             print(str(e))
             return None
 
-    def extract_proxies(self, page):
+    def extract_all_proxies(self, pages):
+        proxies_to_test = []
+        for site, page in pages.items():
+            self.extraction_methods[site](page, proxies_to_test)
+        return proxies_to_test
+
+    @staticmethod
+    def extract_from_7yip(page, proxies_to_test):
         bs = BeautifulSoup(page, 'html.parser')
         rows = bs.find_all('tr')
-        proxies_to_test = []
         for row in rows:
             anonymity_cell = row.find('td', {'data-title': '匿名度'})
-            if anonymity_cell is not None\
+            if anonymity_cell is not None \
                     and anonymity_cell.text == '高匿':
                 if row.find('td', {'data-title': '类型'}).text == 'HTTPS':
-                    proxy = 'https://' + row.find('td', {'data-title': 'IP'}).text + ':'\
+                    proxy = 'https://' + row.find('td', {'data-title': 'IP'}).text + ':' \
                             + row.find('td', {'data-title': 'PORT'}).text
                     proxies_to_test.append(proxy)
-        self.test_all_proxies(proxies_to_test)
-        # code for extracting from 'http://www.goubanjia.com/' not working
+        return proxies_to_test
+        # failed code for extracting from 'http://www.goubanjia.com/' not working
         # anonymity_tds = bs.find_all('td', text='高匿')
         # for td in anonymity_tds:
         #     if td.find_next_sibling('td').text == 'https':
         #         self.proxies.append(td.parent.text)
 
-    def test_all_proxies(self, proxies):
+    def test_and_add_proxies(self, proxies):
         print('running the threading on ', proxies)
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             executor.map(self.add_proxy, proxies)
