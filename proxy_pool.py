@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
-
+import json
 """
 overall logic
 use a singleton class Proxy
@@ -102,7 +102,7 @@ class Proxy(object):
             if anonymity_cell is not None \
                     and anonymity_cell.text == '高匿':
                 if row.find('td', {'data-title': '类型'}).text == 'HTTPS':
-                    proxy = 'https://' + row.find('td', {'data-title': 'IP'}).text + ':' \
+                    proxy = 'http://' + row.find('td', {'data-title': 'IP'}).text + ':' \
                             + row.find('td', {'data-title': 'PORT'}).text
                     proxies_to_test.append(proxy)
         return proxies_to_test
@@ -114,7 +114,7 @@ class Proxy(object):
 
     def test_and_add_proxies(self, proxies):
         print('running the threading on ', proxies)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             executor.map(self.add_proxy, proxies)
 
     def add_proxy(self, proxy):
@@ -122,13 +122,23 @@ class Proxy(object):
             self.proxies.append(proxy)
 
     def test_proxy(self, proxy):
-        test_url = 'https://www.douban.com/'
+        test_url = 'https://httpbin.org/ip'
         page = self.get_page(test_url, proxy)
         if page is None:
             return False
         print(page)
+        ip = json.loads(page)['origin']
+        # the logic is pretty clumsy because I haven't found a usable non-anonymous proxy
+        # so I am not sure how the site behaves in light of that.
+        # TODO improve this after finding a usable non-anonymous proxy
+        if type(ip) is not str:
+            return False
+        if ip.find('153.0.156.52') != -1:
+            return False
         return True
 
 
 a = Proxy()
-a.get_proxies()
+# a.get_proxies()
+b = a.test_proxy('http://190.144.127.234:3128')
+print(b)
