@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import json
 import re
+import chardet
 
 """
 overall logic
@@ -32,17 +33,35 @@ class Proxy(object):
         self.proxies_websites = {
             '7yip': 'https://www.7yip.cn/free/?action=china&page={page_num}',
             '66ip': 'http://www.66ip.cn/{page_num}.html',
+            'ip3366': 'http://www.ip3366.net/?stype=1&page={page_num}',
+
         }
 
         # stores methods for extracting proxies from each supported website
         self.extraction_methods = {
             '7yip': self.extract_from_7yip,
             '66ip': self.extract_from_66ip,
+            'ip3366': self.extract_from_ip3366,
+
         }
 
         self.desired_proxies_num = desired_proxies_num
+        self.proxies_file = None
 
     def get_proxies(self):
+        self.get_proxies_from_file()
+        self.get_proxies_from_web()
+
+    def get_proxies_from_file(self):
+        if self.proxies_file is None:
+            print('the attribute self.proxies_file is not set, no file to extract. Skip get_proxies_from_file')
+            return
+        proxies_to_test = self.extract_proxies_from_file(self.proxies_file)
+        self.test_and_add_proxies(proxies_to_test)
+        print(self.proxies)
+
+
+    def get_proxies_from_web(self):
         page_num = 1
         while len(self.proxies) < self.desired_proxies_num:
             pages = {}
@@ -68,6 +87,23 @@ class Proxy(object):
             self.test_and_add_proxies(proxies_to_test)
             print(self.proxies)
             page_num += 1
+            if page_num >= 5:
+                print('there probably are no more working proxies')
+                print('this is what we got so far', self.proxies)
+
+    @staticmethod
+    def extract_proxies_from_file(path, proxies_to_test=[]):
+        try:
+            with open(path, mode='r') as file:
+                lines = file.readlines()
+                for line in lines:
+                    line = line.strip()
+                    if re.match('^(.+):(.+)$', line):
+                        proxies_to_test.append('http://'+line)
+        except FileNotFoundError:
+            print('!'*15)
+            print('the proxies file designated is incorrect')
+        return proxies_to_test
 
     @staticmethod
     def get_page(url, proxy=None):
@@ -92,21 +128,23 @@ class Proxy(object):
                 page = requests.get(url, headers=headers, proxies={'https': proxy})
 
             if page.status_code == 200:
-                # this is use to handle the difficulty with character encoding scheme used in one of the proxies website
-                if url.find('http://www.66ip.cn/') != -1:
-                    page.encoding = 'gb2312'
-
+                # to accommodate for different character encoding used in chinese websites besides unicode
+                page.encoding = chardet.detect(page.content)['encoding']
                 return page.text
             return None
         except Exception as e:
-            print(str(e))
             return None
 
     def extract_all_proxies(self, pages):
         proxies_to_test = []
         for site, page in pages.items():
             bs = BeautifulSoup(page, 'html.parser')
-            self.extraction_methods[site](bs, proxies_to_test)
+            try:
+                self.extraction_methods[site](bs, proxies_to_test)
+            except AttributeError as e:
+                print('-' * 15)
+                print('something is wrong with extraction method for', site, 'error message:')
+                print(str(e))
         return proxies_to_test
 
     @staticmethod
@@ -139,12 +177,25 @@ class Proxy(object):
             proxies_to_test.append(proxy)
         return proxies_to_test
 
+    @staticmethod
+    def extract_from_ip3366(bs, proxies_to_test):
+        anonymity_cells = bs.find_all('td', text='高匿代理IP')
+        for anonymity_cell in anonymity_cells:
+            if anonymity_cell.find_next_sibling('td').text == 'HTTPS':
+                port_cell = anonymity_cell.find_previous_sibling('td')
+                ip_cell = port_cell.find_previous_sibling('td')
+                proxy = 'http://' + ip_cell.text + ':' + port_cell.text
+                proxies_to_test.append(proxy)
+        return proxies_to_test
+
     def test_and_add_proxies(self, proxies):
         print('running the threading on ', proxies)
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             executor.map(self.add_proxy, proxies)
 
     def add_proxy(self, proxy):
+        if len(self.proxies) >= self.desired_proxies_num:
+            return
         if self.test_proxy(proxy):
             self.proxies.append(proxy)
 
@@ -169,5 +220,14 @@ class Proxy(object):
 
 
 a = Proxy()
+a.proxies_file = './proxies_to_test.txt'
 a.get_proxies()
 print(a.proxies)
+# # page = a.get_page('http://www.ip3366.net/?stype=1&page=1')
+# # bs = BeautifulSoup(page, 'html.parser')
+# # b = []
+# # a.extract_from_ip3366(bs, b)
+# # print(b)
+# b = a.extract_proxies_from_file('./proxies_to_test.txt')
+# print(b)
+# print(len(b))
