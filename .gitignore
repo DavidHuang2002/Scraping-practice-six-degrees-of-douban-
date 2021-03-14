@@ -4,3 +4,4 @@
 venv/
 
 past_successful_proxies.txt
+/proxies_to_test.txt
