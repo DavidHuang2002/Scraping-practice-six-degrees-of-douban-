@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
 import json
+import re
+
 """
 overall logic
 use a singleton class Proxy
@@ -25,24 +27,33 @@ def singleton(cls):
 
 @singleton
 class Proxy(object):
-    def __init__(self):
+    def __init__(self, desired_proxies_num=5):
         self.proxies = []
         self.proxies_websites = {
             '7yip': 'https://www.7yip.cn/free/?action=china&page={page_num}',
+            '66ip': 'http://www.66ip.cn/{page_num}.html',
         }
 
         # stores methods for extracting proxies from each supported website
         self.extraction_methods = {
             '7yip': self.extract_from_7yip,
+            '66ip': self.extract_from_66ip,
         }
+
+        self.desired_proxies_num = desired_proxies_num
 
     def get_proxies(self):
         page_num = 1
-        while len(self.proxies) < 1:
+        while len(self.proxies) < self.desired_proxies_num:
             pages = {}
             # getting all the first pages from the proxy websites
             for site, url in self.proxies_websites.items():
-                url = url.format(page_num=page_num)
+                # the first page of 66ip behaves a little differently, use this if statement to handle it
+                if site == '66ip' and page_num == 1:
+                    url = url.format(page_num='index')
+                else:
+                    url = url.format(page_num=page_num)
+
                 page = self.get_page(url)
                 if page is not None:
                     print(url)
@@ -81,6 +92,10 @@ class Proxy(object):
                 page = requests.get(url, headers=headers, proxies={'https': proxy})
 
             if page.status_code == 200:
+                # this is use to handle the difficulty with character encoding scheme used in one of the proxies website
+                if url.find('http://www.66ip.cn/') != -1:
+                    page.encoding = 'gb2312'
+
                 return page.text
             return None
         except Exception as e:
@@ -90,12 +105,12 @@ class Proxy(object):
     def extract_all_proxies(self, pages):
         proxies_to_test = []
         for site, page in pages.items():
-            self.extraction_methods[site](page, proxies_to_test)
+            bs = BeautifulSoup(page, 'html.parser')
+            self.extraction_methods[site](bs, proxies_to_test)
         return proxies_to_test
 
     @staticmethod
-    def extract_from_7yip(page, proxies_to_test):
-        bs = BeautifulSoup(page, 'html.parser')
+    def extract_from_7yip(bs, proxies_to_test):
         rows = bs.find_all('tr')
         for row in rows:
             anonymity_cell = row.find('td', {'data-title': '匿名度'})
@@ -112,9 +127,21 @@ class Proxy(object):
         #     if td.find_next_sibling('td').text == 'https':
         #         self.proxies.append(td.parent.text)
 
+    # Does not work because there is something wrong with the character encoding but not sure where is wrong
+    @staticmethod
+    def extract_from_66ip(bs, proxies_to_test):
+        anonymity_cells = bs.find_all('td', text='高匿代理')
+        for anonymity_cell in anonymity_cells:
+            previous_cells = anonymity_cell.find_previous_siblings('td')
+            port = previous_cells[1].text
+            ip = previous_cells[2].text
+            proxy = 'http://'+ip+':'+port
+            proxies_to_test.append(proxy)
+        return proxies_to_test
+
     def test_and_add_proxies(self, proxies):
         print('running the threading on ', proxies)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             executor.map(self.add_proxy, proxies)
 
     def add_proxy(self, proxy):
@@ -133,12 +160,14 @@ class Proxy(object):
         # TODO improve this after finding a usable non-anonymous proxy
         if type(ip) is not str:
             return False
-        if ip.find('153.0.156.52') != -1:
+
+        # use regex to extract the proxy ip number only and compare against the origin
+        if ip != re.search('http://(.*):(.*)', proxy).group(1):
             return False
+        print(proxy)
         return True
 
 
 a = Proxy()
-# a.get_proxies()
-b = a.test_proxy('http://190.144.127.234:3128')
-print(b)
+a.get_proxies()
+print(a.proxies)
