@@ -2,3 +2,5 @@
 .idea/
 
 venv/
+
+past_successful_proxies.txt
