@@ -5,6 +5,7 @@ import json
 import re
 import chardet
 import time
+
 """
 overall logic
 use a singleton class Proxy
@@ -16,6 +17,12 @@ possible proxies website
 https://www.7yip.cn/free/?action=china&page=1
 """
 
+'''
+proxy file format has to be like this:
+144.91.89.199:3128
+on each line
+'''
+
 def singleton(cls):
     _instance = {}
 
@@ -23,6 +30,7 @@ def singleton(cls):
         if cls not in _instance:
             _instance[cls] = cls()
         return _instance[cls]
+
     return inner
 
 
@@ -64,7 +72,6 @@ class Proxy(object):
         self.test_and_add_proxies(proxies_to_test)
         print(self.proxies)
 
-
     def get_proxies_from_web(self):
         page_num = 1
         while len(self.proxies) < self.desired_proxies_num:
@@ -103,9 +110,9 @@ class Proxy(object):
                 for line in lines:
                     line = line.strip()
                     if re.match('^(.+):(.+)$', line):
-                        proxies_to_test.append('http://'+line)
+                        proxies_to_test.append('http://' + line)
         except FileNotFoundError:
-            print('!'*15)
+            print('!' * 15)
             print('the proxies file designated is incorrect')
         return proxies_to_test
 
@@ -177,7 +184,7 @@ class Proxy(object):
             previous_cells = anonymity_cell.find_previous_siblings('td')
             port = previous_cells[1].text
             ip = previous_cells[2].text
-            proxy = 'http://'+ip+':'+port
+            proxy = 'http://' + ip + ':' + port
             proxies_to_test.append(proxy)
         return proxies_to_test
 
@@ -246,28 +253,18 @@ class Proxy(object):
             return self.rotate_proxies()
 
 
+if __name__ == '__main__':
+    pass
+    a = Proxy()
+    a.proxies_file = './proxies_to_test.txt'
+    a.get_proxies()
+    print(a.proxies)
+    a.crawl_delay = 1
+    for i in range(20):
+        proxy = a.rotate_proxies()
+        print(i, ':', a.counter, proxy)
 
-
-
-
-
-
-
-a = Proxy()
-a.proxies_file = './proxies_to_test.txt'
-a.get_proxies()
-print(a.proxies)
-a.crawl_delay = 1
-for i in range(20):
-    proxy = a.rotate_proxies()
-    print(i, ':', a.counter, proxy)
-
-
-# # page = a.get_page('http://www.ip3366.net/?stype=1&page=1')
-# # bs = BeautifulSoup(page, 'html.parser')
-# # b = []
-# # a.extract_from_ip3366(bs, b)
-# # print(b)
-# b = a.extract_proxies_from_file('./proxies_to_test.txt')
-# print(b)
-# print(len(b))
+# a = Proxy()
+# a.proxies_file = './proxies_to_test.txt'
+# b = Proxy()
+# print(b.proxies_file)
