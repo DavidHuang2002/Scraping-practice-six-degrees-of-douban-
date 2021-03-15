@@ -4,7 +4,7 @@ import concurrent.futures
 import json
 import re
 import chardet
-
+import time
 """
 overall logic
 use a singleton class Proxy
@@ -28,7 +28,7 @@ def singleton(cls):
 
 @singleton
 class Proxy(object):
-    def __init__(self, desired_proxies_num=5):
+    def __init__(self, desired_proxies_num=5, crawl_delay=5):
         self.proxies = []
         self.proxies_websites = {
             '7yip': 'https://www.7yip.cn/free/?action=china&page={page_num}',
@@ -47,6 +47,10 @@ class Proxy(object):
 
         self.desired_proxies_num = desired_proxies_num
         self.proxies_file = None
+        self.counter = 0
+        self.time_tracker = time.time()
+        # the crawl delay for scraping the site in seconds
+        self.crawl_delay = crawl_delay
 
     def get_proxies(self):
         self.get_proxies_from_file()
@@ -190,7 +194,7 @@ class Proxy(object):
 
     def test_and_add_proxies(self, proxies):
         print('running the threading on ', proxies)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             executor.map(self.add_proxy, proxies)
 
     def add_proxy(self, proxy):
@@ -218,11 +222,47 @@ class Proxy(object):
         print(proxy)
         return True
 
+    # Codes for getting proxies from the proxy pool
+    def rotate_proxies(self):
+        if len(self.proxies) == 0:
+            raise Exception('All proxies are invalid. No more proxies available ')
+
+        if self.counter >= len(self.proxies):
+            self.counter = 0
+            # make sure every proxy has waited at least a crawl delay
+            time_diff = time.time() - self.time_tracker
+            if time_diff < self.crawl_delay:
+                time.sleep(self.crawl_delay - time_diff)
+                self.time_tracker = time.time()
+
+        proxy = self.proxies[self.counter]
+        if self.test_proxy(proxy):
+            self.counter += 1
+            return proxy
+        else:
+            # when the proxy is invalid remove it from the list and keep rotating to get the next working proxy
+            # TODO add a thread that finds a new proxy to add to the list
+            self.proxies.remove(self.counter)
+            return self.rotate_proxies()
+
+
+
+
+
+
+
+
 
 a = Proxy()
 a.proxies_file = './proxies_to_test.txt'
 a.get_proxies()
 print(a.proxies)
+a.crawl_delay = 1
+for i in range(20):
+    proxy = a.rotate_proxies()
+    print(i, ':', a.counter, proxy)
+
+
 # # page = a.get_page('http://www.ip3366.net/?stype=1&page=1')
 # # bs = BeautifulSoup(page, 'html.parser')
 # # b = []
