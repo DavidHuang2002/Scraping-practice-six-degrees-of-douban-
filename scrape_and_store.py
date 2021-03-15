@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 from queue import Queue
 from time import sleep
 import pymysql
+from proxy_pool import Proxy
+
 
 ''' 
 Outline
@@ -18,7 +20,6 @@ Get the 10 links in the recommendation section
 
 - Crawl around
 If the pages that the link links to has not been visited, enqueue the link
-(Use recursion)
 
 - Storing the info into MySQL
 page url, title, whether visited into a table
@@ -42,12 +43,14 @@ def resume(cur):
     return links
 
 
-def get_page(url):
-    # TODO
-    # if exception, return None
-    page = ''
-    return page
-
+# remember to initialize the proxy pool before using this method
+def get_page(url, use_proxy=True):
+    pool = Proxy()
+    if use_proxy:
+        proxy = pool.rotate_proxies()
+    else:
+        proxy = None
+    return pool.get_page(url, proxy)
 
 def extract_data(page):
     # exception handling - if not exist then the field = None
@@ -110,3 +113,14 @@ def main():
         with conn.cursor() as cur:
             links = resume(cur)
 
+
+def debug_testing():
+    proxy_pool = Proxy()
+    proxy_pool.proxies_file = './past_successful_proxies.txt'
+    proxy_pool.get_proxies()
+    page = get_page('https://movie.douban.com/subject/34804147/')
+    print(page)
+
+
+
+debug_testing()
